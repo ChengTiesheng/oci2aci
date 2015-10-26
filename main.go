@@ -16,45 +16,105 @@
 package main
 
 import (
-	"flag"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 
+	log "github.com/Sirupsen/logrus"
+	"github.com/appc/spec/schema"
+	"github.com/codegangsta/cli"
 	"github.com/huawei-openlab/oci2aci/convert"
 )
 
-var (
-	flagDebug = flag.Bool("debug", false, "Enables debug messages")
-)
-
-func usage() {
-	fmt.Fprintf(os.Stderr, "NAME:\n")
-	fmt.Fprintf(os.Stderr, "    oci2aci - Tool for conversion from oci to aci\n")
-
-	fmt.Fprintf(os.Stderr, "USAGE:\n")
-	fmt.Fprintf(os.Stderr, "    oci2aci [--debug] [arguments...]\n")
-
-	fmt.Fprintf(os.Stderr, "VERSION:\n")
-	fmt.Fprintf(os.Stderr, "    0.1.0\n")
-
-	fmt.Fprintf(os.Stderr, "FLAGS:\n")
-	flag.PrintDefaults()
-}
-
 func main() {
-	flag.Usage = usage
-	flag.Parse()
-	args := flag.Args()
-
-	if len(args) < 1 {
-		usage()
-		return
+	log.SetLevel(log.InfoLevel)
+	app := cli.NewApp()
+	app.Name = "oci2aci"
+	app.Usage = "Tool for conversion between oci and aci"
+	app.Version = "0.1.0"
+	app.Flags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "debug",
+			Usage: "enables debug messages",
+		},
+	}
+	app.Commands = []cli.Command{
+		{
+			Name:  "convert",
+			Usage: "Convert oci to aci",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "os",
+					Value: "linux",
+					Usage: "Target OS",
+				},
+			},
+			Action: oci2aciProc,
+		},
+		{
+			Name:   "reversal",
+			Usage:  "Convert aci to oci",
+			Action: aci2ociProc,
+		},
 	}
 
-	if err := convert.RunOCI2ACI(args[0], *flagDebug); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+	app.Run(os.Args)
+}
+
+func oci2aciProc(c *cli.Context) {
+	bDebug := c.GlobalBool("debug")
+
+	args := c.Args()
+
+	switch len(args) {
+	case 1:
+		err := convert.RunOCI2ACI(args[0], bDebug)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case 2:
+		outFile := args[1]
+		ext := filepath.Ext(outFile)
+		if ext != schema.ACIExtension {
+			fmt.Fprintf(os.Stderr, "oci2aci: Extension must be %s (given %s)", schema.ACIExtension, ext)
+			os.Exit(1)
+		}
+
+		aciImgPath, err := convert.Oci2aciImage(args[0])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "oci2aci: Convert failed: %s", err)
+			os.Exit(1)
+		}
+
+		if err = run(exec.Command("mv", aciImgPath, args[1])); err != nil {
+			os.Exit(1)
+		}
+
+	default:
+		cli.ShowCommandHelp(c, "convert")
+
 	}
 
 	return
+}
+
+func aci2ociProc(c *cli.Context) {
+	return
+}
+
+func run(cmd *exec.Cmd) error {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	go io.Copy(os.Stdout, stdout)
+	go io.Copy(os.Stderr, stderr)
+	return cmd.Run()
 }

@@ -333,7 +333,7 @@ func genManifest(path string) *schema.ImageManifest {
 func convertLayout(srcPath, dstPath string) (string, error) {
 	src, _ := filepath.Abs(srcPath)
 	src += "/rootfs"
-	if err := run(exec.Command("cp", "-rf", src, dstPath)); err != nil {
+	if err := Run(exec.Command("cp", "-rf", src, dstPath)); err != nil {
 		return "", err
 	}
 

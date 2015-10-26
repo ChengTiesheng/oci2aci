@@ -60,7 +60,7 @@ func InitDebug() {
 	debugEnabled = true
 }
 
-func run(cmd *exec.Cmd) error {
+func Run(cmd *exec.Cmd) error {
 	/*if debugEnabled {
 		log.Printf("run: %v %v", cmd.Path, cmd.Args)
 	}*/
